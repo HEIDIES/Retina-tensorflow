@@ -1,89 +1,168 @@
 import tensorflow as tf
 import ops
-import numpy as np
 
 
-def retina7(ipt, name='retina7', reuse=False, is_training=True):
+def c3s1k32(ipt, name='c3s1k32', reuse=False, is_training=True, norm='batch'):
     with tf.variable_scope(name):
-        ipt = tf.nn.relu(ipt)
-        return ops.conv2d(ipt, 256, 3, 1, 2, norm=None, activation=None,
-                          reuse=reuse, is_training=is_training, name='c1s2k256', use_bias=True,
-                          kernel_initializer=None)
+        return ops.conv2d(ipt, 32, 3, 1, 1, norm=norm, activation=ops.leaky_relu,
+                          name=name, reuse=reuse, is_training=is_training)
 
 
-def retina6(ipt, name='retina6', reuse=False, is_training=True):
+def c3s2k64(ipt, name='c3s2k64', reuse=False, is_training=True, norm='batch'):
     with tf.variable_scope(name):
-        return ops.conv2d(ipt, 256, 3, 1, 2, norm=None, activation=None,
-                          reuse=reuse, is_training=is_training, name='c1s2256', use_bias=True,
-                          kernel_initializer=None)
+        return ops.conv2d(ipt, 64, 3, 1, 2, norm=norm, activation=ops.leaky_relu,
+                          name=name, reuse=reuse, is_training=is_training)
 
 
-def retina5(ipt, name='retina5', reuse=False, is_training=True):
+def dark_net_conv_1(ipt, i, name='dark_net_conv_1', reuse=False, is_training=True, norm='batch'):
+    with tf.variable_scope(name + str(i)):
+        c1s1k32 = ops.conv2d(ipt, 32, 1, 0, 1, norm=norm, activation=ops.leaky_relu,
+                             name='c1s1k32', reuse=reuse, is_training=is_training)
+        c3s1k64 = ops.conv2d(c1s1k32, 64, 3, 1, 1, norm=norm, activation=ops.leaky_relu,
+                             name='c3s1k64', reuse=reuse, is_training=is_training)
+        return tf.add(c3s1k64, ipt)
+
+
+def c3s2k128(ipt, name='c3s2k128', reuse=False, is_training=True, norm='batch'):
     with tf.variable_scope(name):
-        return ops.conv2d(ipt, 256, 1, 0, 1, norm=None, activation=tf.nn.relu,
-                          reuse=reuse, is_training=is_training, name='c1s1256', use_bias=True,
-                          kernel_initializer=None)
+        return ops.conv2d(ipt, 128, 3, 1, 2, norm=norm, activation=ops.leaky_relu,
+                          name=name, reuse=reuse, is_training=is_training)
 
 
-def retina4(ipt1, ipt2, name='retina4', reuse=False, is_training=True,
-            resize_method=tf.image.ResizeMethod.NEAREST_NEIGHBOR):
-    shape = ipt2.get_shape().as_list()
+def dark_net_conv_2(ipt, i, name='dark_net_conv_2', reuse=False, is_training=True, norm='batch'):
+    with tf.variable_scope(name + str(i)):
+        c1s1k64 = ops.conv2d(ipt, 64, 1, 0, 1, norm=norm, activation=ops.leaky_relu,
+                             name='c1s1k64', reuse=reuse, is_training=is_training)
+        c3s1k128 = ops.conv2d(c1s1k64, 128, 3, 1, 1, norm=norm, activation=ops.leaky_relu,
+                              name='c3s1k128', reuse=reuse, is_training=is_training)
+        return tf.add(c3s1k128, ipt)
+
+
+def c3s2k256(ipt, name='c3s2k256', reuse=False, is_training=True, norm='batch'):
     with tf.variable_scope(name):
-        c1s1k256 = ops.conv2d(ipt1, 256, 1, 0, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c1s1k256', use_bias=True,
-                              kernel_initializer=None)
-        upsample = tf.image.resize_images(ipt2, [shape[1] * 2, shape[2] * 2],
-                                          method=resize_method)
-        return tf.add(c1s1k256, upsample)
+        return ops.conv2d(ipt, 256, 3, 1, 2, norm=norm, activation=ops.leaky_relu,
+                          name=name, reuse=reuse, is_training=is_training)
 
 
-def retina3(ipt1, ipt2, name='retina3', reuse=False, is_training=True,
-            resize_method=tf.image.ResizeMethod.NEAREST_NEIGHBOR):
-    shape = ipt2.get_shape().as_list()
+def dark_net_conv_3(ipt, i, name='dark_net_conv_3', reuse=False, is_training=True, norm='batch'):
+    with tf.variable_scope(name + str(i)):
+        c1s1k128 = ops.conv2d(ipt, 128, 1, 0, 1, norm=norm, activation=ops.leaky_relu,
+                              name='c1s1k128', reuse=reuse, is_training=is_training)
+        c3s1k256 = ops.conv2d(c1s1k128, 256, 3, 1, 1, norm=norm, activation=ops.leaky_relu,
+                              name='c3s1k256', reuse=reuse, is_training=is_training)
+        return tf.add(c3s1k256, ipt)
+
+
+def c3s2k512(ipt, name='c3s2k512', reuse=False, is_training=True, norm='batch'):
     with tf.variable_scope(name):
-        c1s1k256 = ops.conv2d(ipt1, 256, 1, 0, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c1s1k256', use_bias=True,
-                              kernel_initializer=None)
-        upsample = tf.image.resize_images(ipt2, [shape[1] * 2, shape[2] * 2],
-                                          method=resize_method)
-        return tf.add(c1s1k256, upsample)
+        return ops.conv2d(ipt, 512, 3, 1, 2, norm=norm, activation=ops.leaky_relu,
+                          name=name, reuse=reuse, is_training=is_training)
 
 
-def retina_class_subnet(ipt, num_anchors, name='retina_class_subnet', reuse=False, is_training=True):
+def dark_net_conv_4(ipt, i, name='dark_net_conv_4', reuse=False, is_training=True, norm='batch'):
+    with tf.variable_scope(name + str(i)):
+        c1s1k256 = ops.conv2d(ipt, 256, 1, 0, 1, norm=norm, activation=ops.leaky_relu,
+                              name='c1s1k256', reuse=reuse, is_training=is_training)
+        c3s1k512 = ops.conv2d(c1s1k256, 3, 1, 1, norm=norm, activation=ops.leaky_relu,
+                              name='c3s1k512', reuse=reuse, is_training=is_training)
+        return tf.add(c3s1k512, ipt)
+
+
+def c3s2k1024(ipt, name='c3s2k1024', reuse=False, is_training=True, norm='batch'):
     with tf.variable_scope(name):
-        c3s1k256 = ops.conv2d(ipt, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_1', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        c3s1k256 = ops.conv2d(c3s1k256, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_2', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        c3s1k256 = ops.conv2d(c3s1k256, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_3', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        c3s1k256 = ops.conv2d(c3s1k256, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_4', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        retina_class_subnet_output = ops.conv2d(c3s1k256, num_anchors, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                                                reuse=reuse, is_training=is_training, name='output', use_bias=True,
-                                                kernel_initializer=None, weights_std=0.01, bias_init=-np.log(99))
-        return retina_class_subnet_output
+        return ops.conv2d(ipt, 1024, 3, 1, 2, norm=norm, activation=ops.leaky_relu,
+                          name=name, reuse=reuse, is_training=is_training)
 
 
-def retina_bboxreg_subnet(ipt, num_anchors, name='retina_regbbox_subnet', reuse=False, is_training=True):
+def dark_net_conv_5(ipt, i, name='dark_net_conv_5', reuse=False, is_training=True, norm='batch'):
+    with tf.variable_scope(name + str(i)):
+        c1s1k512 = ops.conv2d(ipt, 512, 1, 0, 1, norm=norm, activation=ops.leaky_relu,
+                              name='c1s1k512', reuse=reuse, is_training=is_training)
+        c3s1k1024 = ops.conv2d(c1s1k512, 1024, 3, 1, 1, norm=norm, activation=ops.leaky_relu,
+                               name='c3s1k1024', reuse=reuse, is_training=is_training)
+        return tf.add(c3s1k1024, ipt)
+
+
+def yolo_1(ipt, num_classes, name='yolo_1', reuse=False, is_training=True, norm='bath',
+           activation=ops.leaky_relu):
     with tf.variable_scope(name):
-        c3s1k256 = ops.conv2d(ipt, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_1', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        c3s1k256 = ops.conv2d(c3s1k256, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_2', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        c3s1k256 = ops.conv2d(c3s1k256, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_3', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        c3s1k256 = ops.conv2d(c3s1k256, 256, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                              reuse=reuse, is_training=is_training, name='c3s1k256_4', use_bias=True,
-                              kernel_initializer=None, weights_std=0.01)
-        retina_bboxreg_subnet_output = ops.conv2d(c3s1k256, num_anchors * 4, 3, 1, 1, norm=None, activation=tf.nn.relu,
-                                                  reuse=reuse, is_training=is_training, name='output', use_bias=True,
-                                                  kernel_initializer=None, weights_std=0.01, bias_init=-np.log(99))
-        return retina_bboxreg_subnet_output
+        c1s1k512 = ops.conv2d(ipt, 512, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k512_1', reuse=reuse, is_training=is_training)
+        c3s1k1024 = ops.conv2d(c1s1k512, 3, 1, 1, norm=norm, activation=activation,
+                               name='c3s1k1024_1', reuse=reuse, is_training=is_training)
+        c1s1k512 = ops.conv2d(c3s1k1024, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k512_2', reuse=reuse, is_training=is_training)
+        c3s1k1024 = ops.conv2d(c1s1k512, 1024, 3, 1, 1, norm=norm, activation=activation,
+                               name='c3s1k1024_2', reuse=reuse, is_training=is_training)
+        c1s1k512 = ops.conv2d(c3s1k1024, 512, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k512_3', reuse=reuse, is_training=is_training)
+        yolo_route = c1s1k512
+        c3s1k1024 = ops.conv2d(c1s1k512, 3, 1, 1, norm=norm, activation=activation,
+                               name='c3s1k1024_3', reuse=reuse, is_training=is_training)
+        large_obj_raw_detections = ops.conv2d(c3s1k1024, 3 * (num_classes + 5), 1, 0, 1, norm=None, activation=None,
+                                              name='large_obj_raw_detections', reuse=reuse, is_training=is_training)
+        return large_obj_raw_detections, yolo_route
+
+
+def yolo_2(ipt1, ipt2, num_classes, name='yolo_2', reuse=False, is_training=True, norm='batch',
+           activation=ops.leaky_relu):
+    with tf.variable_scope(name):
+        c1s1k256 = ops.conv2d(ipt1, 256, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k256_1', reuse=reuse, is_training=is_training)
+        upsample = tf.image.resize_nearest_neighbor(c1s1k256, (c1s1k256.shape[1] * 2, c1s1k256.shape[2] * 2))
+        route = tf.concat([upsample, ipt2], axis=3)
+        c1s1k256 = ops.conv2d(route, 256, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k256_2', reuse=reuse, is_training=is_training)
+        c3s1k512 = ops.conv2d(c1s1k256, 512, 3, 1, 1, norm=norm, activation=activation,
+                              name='c3s1k512_1', reuse=reuse, is_training=is_training)
+        c1s1k256 = ops.conv2d(c3s1k512, 256, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k256_3', reuse=reuse, is_training=is_training)
+        c3s1k512 = ops.conv2d(c1s1k256, 512, 3, 1, 1, norm=norm, activation=activation,
+                              name='c3s1k512_2', reuse=reuse, is_training=is_training)
+        c1s1k256 = ops.conv2d(c3s1k512, 256, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k256_4', reuse=reuse, is_training=is_training)
+        yolo_route = c1s1k256
+        c3s1k512 = ops.conv2d(c1s1k256, 512, 3, 1, 1, norm=norm, activation=activation,
+                              name='c3s1k512_3', reuse=reuse, is_training=is_training)
+        medium_obj_raw_detections = ops.conv2d(c3s1k512, 3 * (num_classes + 5), 1, 0, 1, norm=None, activation=None,
+                                               name='medium_obj_raw_detections', reuse=reuse, is_training=is_training)
+        return medium_obj_raw_detections, yolo_route
+
+
+def yolo_3(ipt1, ipt2, num_classes, name='yolo_3', reuse=False, is_training=True, norm='batch',
+           activation=ops.leaky_relu):
+    with tf.variable_scope(name):
+        c1s1k128 = ops.conv2d(ipt1, 128, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k128_1', reuse=reuse, is_training=is_training)
+        upsample = tf.image.resize_nearest_neighbor(c1s1k128, (c1s1k128.shape[1] * 2, c1s1k128.shape[2] * 2))
+        route = tf.concat([upsample, ipt2], axis=3)
+        c1s1k128 = ops.conv2d(route, 128, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k128_2', reuse=reuse, is_training=is_training)
+        c3s1k256 = ops.conv2d(c1s1k128, 256, 3, 1, 1, norm=norm, activation=activation,
+                              name='c3s1k256_1', reuse=reuse, is_training=is_training)
+        c1s1k128 = ops.conv2d(c3s1k256, 128, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k128_3', reuse=reuse, is_training=is_training)
+        c3s1k256 = ops.conv2d(c1s1k128, 256, 3, 1, 1, norm=norm, activation=activation,
+                              name='c3s1k256_2', reuse=reuse, is_training=is_training)
+        c1s1k128 = ops.conv2d(c3s1k256, 128, 1, 0, 1, norm=norm, activation=activation,
+                              name='c1s1k128_4', reuse=reuse, is_training=is_training)
+
+        c3s1k256 = ops.conv2d(c1s1k128, 256, 3, 1, 1, norm=norm, activation=activation,
+                              name='c3s1k256_3', reuse=reuse, is_training=is_training)
+        small_obj_raw_detections = ops.conv2d(c3s1k256, 3 * (num_classes + 5), 1, 0, 1, norm=None, activation=None,
+                                              name='medium_obj_raw_detections', reuse=reuse, is_training=is_training)
+        return small_obj_raw_detections
+
+
+def yolo_layer(ipt, name, anchors, num_classes, image_size):
+    with tf.variable_scope(name):
+        inputs_shape = ipt.get_shape().as_list()
+        stride_x = image_size // inputs_shape[2]
+        stride_y = image_size // inputs_shape[1]
+
+        num_anchors = len(anchors)
+        anchors = tf.constant([[a[0] / stride_x, a[1] / stride_y] for a in anchors], dtype=tf.float32)
+        anchors_w = tf.reshape(anchors[:, 0], [1, 1, 1, num_anchors, 1])
+        anchors_h = tf.reshape(anchors[:, 1], [1, 1, 1, num_anchors, 1])
+
+        

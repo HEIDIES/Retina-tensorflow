@@ -2,7 +2,6 @@ import tensorflow as tf
 import utils
 from tensorflow.contrib.slim import nets
 import numpy as np
-from retinanet_subnet import RETINANETSUBNET
 slim = tf.contrib.slim
 
 

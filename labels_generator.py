@@ -6,42 +6,6 @@ import json_convert
 import cv2
 
 
-def get_keypoint_heatmap(image_ids, image_heights, image_widths, labels, gaussian_sigma):
-    heatmap = np.zeros(shape=[hyper_parameters.FLAGS.batch_size, hyper_parameters.FLAGS.image_size // 4,
-                              hyper_parameters.FLAGS.image_size // 4,
-                              hyper_parameters.FLAGS.heatmap_channels], dtype=np.float32)
-    for i in range(len(image_ids)):
-        label = labels[image_ids[i].decode('utf-8')]
-        origin_height = image_heights[i]
-        origin_width = image_widths[i]
-        for key in label[1]:
-            for j in range(len(label[1][key]) // 3):
-                width = hyper_parameters.FLAGS.image_size // 4
-                height = hyper_parameters.FLAGS.image_size // 4
-                center_x = int(label[1][key][3 * j] * width / float(origin_height))
-                center_y = int(label[1][key][3 * j + 1] * height / float(origin_width))
-                point_status = label[1][key][3 * j + 2]
-                if point_status != 3:
-                    th = 1.6052
-                    delta = math.sqrt(th * 2)
-
-                    x0 = int(max(0, center_x - delta * gaussian_sigma))
-                    y0 = int(max(0, center_y - delta * gaussian_sigma))
-
-                    x1 = int(min(width, center_x + delta * gaussian_sigma))
-                    y1 = int(min(height, center_y + delta * gaussian_sigma))
-
-                    for y in range(y0, y1):
-                        for x in range(x0, x1):
-                            d = (x - center_x) ** 2 + (y - center_y) ** 2
-                            exp = d / 2.0 / gaussian_sigma / gaussian_sigma
-                            if exp > th:
-                                continue
-                            heatmap[i][y][x][j] = max(heatmap[i][y][x][j], math.exp(-exp))
-                            heatmap[i][y][x][j] = min(heatmap[i][y][x][j], 1.0)
-    return heatmap
-
-
 def get_detector_heatmap(image_ids, image_heights, image_widths, labels):
     heatmaps = []
     for k in range(5):
@@ -99,9 +63,6 @@ def get_detector_heatmap(image_ids, image_heights, image_widths, labels):
     return heatmaps
 
 
-test_mode = 'detector'
-
-
 if __name__ == '__main__':
     _labels = json_convert.load_label('data/label/keypoint_train_annotations_20170909.json')
     input_dir = 'data/train'
@@ -122,39 +83,35 @@ if __name__ == '__main__':
 
         if i_ == 3:
             break
-    if test_mode == 'keypoint': 
-        heat_map = get_keypoint_heatmap(img_ids, img_heights, img_widths, _labels,
-                                        hyper_parameters.FLAGS.gaussian_sigma)
-        print(heat_map.shape)
-    elif test_mode == 'detector':
-        heat_maps = get_detector_heatmap(img_ids, img_heights, img_widths, _labels)
-        b = 0
-        i_ = 0
-        for img, width_, height_ in zip(imgs, img_widths, img_heights):
-            # print(width, height)
-            heat_map = np.reshape(heat_maps[b][i_], [hyper_parameters.FLAGS.image_size // int(8 * (2 ** b)),
-                                                     hyper_parameters.FLAGS.image_size // int(8 * (2 ** b)),
-                                                     hyper_parameters.FLAGS.num_anchors,
-                                                     hyper_parameters.FLAGS.num_classes +
-                                                     hyper_parameters.FLAGS.bbox_dims])
-            _wh = np.square(heat_map[:, :, 0, 2: 4]) * np.reshape([width_, height_], [1, 1, 1, 2])
-            current_size = hyper_parameters.FLAGS.image_size // (8 * (2 ** b))
-            _centers = heat_map[:, :, 0, 0: 2] * np.reshape([width_, height_], [1, 1, 1, 2]) / current_size
-            print(current_size)
-            _up_left, _down_right = _centers - (_wh * 0.5), _centers + (_wh * 0.5)
-            _up_left = np.squeeze(_up_left, 0)
-            _down_right = np.squeeze(_down_right, 0)
-            _confs = heat_map[:, :, 0, 4]
-            rows, cols = _confs.shape
-            for j_ in range(cols):
-                for k_ in range(rows):
-                    if _confs[j_][k_] >= 0.5:
-                        # print('center : (%d, ' %_centers[0][j][k][0], '%d)' %_centers[0][j][k][1])
-                        # print(_up_left[j][k], _down_right[j][k])
-                        cv2.rectangle(img, (int(_up_left[j_][k_][0]), int(_up_left[j_][k_][1])),
-                                      (int(_down_right[j_][k_][0]), int(_down_right[j_][k_][1])), (0, 0, 255),
-                                      thickness=2)
-            # cv2.rectangle(im, (10, 10), (110, 110), (0, 0, 255), thickness=2)
-            i_ += 1
-            cv2.imshow('image' + str(i_), img)
+
+    heat_maps = get_detector_heatmap(img_ids, img_heights, img_widths, _labels)
+    b = 0
+    i_ = 0
+    for img, width_, height_ in zip(imgs, img_widths, img_heights):
+        # print(width, height)
+        heat_map = np.reshape(heat_maps[b][i_], [hyper_parameters.FLAGS.image_size // int(8 * (2 ** b)),
+                                                 hyper_parameters.FLAGS.image_size // int(8 * (2 ** b)),
+                                                 hyper_parameters.FLAGS.num_anchors,
+                                                 hyper_parameters.FLAGS.num_classes +
+                                                 hyper_parameters.FLAGS.bbox_dims])
+        _wh = np.square(heat_map[:, :, 0, 2: 4]) * np.reshape([width_, height_], [1, 1, 1, 2])
+        current_size = hyper_parameters.FLAGS.image_size // (8 * (2 ** b))
+        _centers = heat_map[:, :, 0, 0: 2] * np.reshape([width_, height_], [1, 1, 1, 2]) / current_size
+        print(current_size)
+        _up_left, _down_right = _centers - (_wh * 0.5), _centers + (_wh * 0.5)
+        _up_left = np.squeeze(_up_left, 0)
+        _down_right = np.squeeze(_down_right, 0)
+        _confs = heat_map[:, :, 0, 4]
+        rows, cols = _confs.shape
+        for j_ in range(cols):
+            for k_ in range(rows):
+                if _confs[j_][k_] >= 0.5:
+                    # print('center : (%d, ' %_centers[0][j][k][0], '%d)' %_centers[0][j][k][1])
+                    # print(_up_left[j][k], _down_right[j][k])
+                    cv2.rectangle(img, (int(_up_left[j_][k_][0]), int(_up_left[j_][k_][1])),
+                                  (int(_down_right[j_][k_][0]), int(_down_right[j_][k_][1])), (0, 0, 255),
+                                  thickness=2)
+        # cv2.rectangle(im, (10, 10), (110, 110), (0, 0, 255), thickness=2)
+        i_ += 1
+        cv2.imshow('image' + str(i_), img)
     cv2.waitKey(0)
