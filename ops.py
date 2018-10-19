@@ -11,7 +11,7 @@ def leaky_relu(x):
     return tf.where(tf.greater(x, 0), x, 0.001 * x)
 
 
-def _weights(name, shape, mean=0.0, stddev=0.001, initializer=None):
+def _weights(name, shape, mean=0.0, stddev=0.01, initializer=None):
     """Weights initializer.
     Args:
         name: string, the name of weight, e.g. weights
@@ -144,7 +144,7 @@ def fully_connected(x, output_dims, use_bias=True, is_training=True, reuse=False
 
 def conv2d(x, filters, ksize, pad_size=0, stride=1, pad_mode='CONSTANT', padding='VALID',
            norm=None, activation=None, name='conv2d', reuse=False, is_training=True,
-           kernel_initializer='he_uniform', use_bias=False, upsampling=None, act_first=False,
+           kernel_initializer=None, use_bias=False, upsampling=None, act_first=False,
            weights_std=0.001, bias_init=0.0):
     """
     :param x: 4D tensor, [batch_size, height, width, channels]

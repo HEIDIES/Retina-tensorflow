@@ -1,7 +1,6 @@
 import tensorflow as tf
-import utils
-from tensorflow.contrib.slim import nets
-import numpy as np
+from dark_net import Darknet
+from yolo_v3 import Yolov3
 slim = tf.contrib.slim
 
 
@@ -9,136 +8,235 @@ class DETECTERSUBNET:
     def __init__(self, name, image_size, anchors,
                  batch_size=16,
                  num_anchors=9,
-                 learning_rate=0.01,
-                 gamma=2.0,
-                 alpha=0.25
+                 learning_rate=0.001,
+                 num_classes=1,
+                 num_id1=1,
+                 num_id2=2,
+                 num_id3=8,
+                 num_id4=8,
+                 num_id5=4,
+                 norm='batch',
+                 threshold=0.5,
+                 max_num_boxes_per_image=20,
+                 traininig=True,
+                 confidence_score=0.7
                  ):
+        self.confidence_score = confidence_score
+        self.training = traininig
         self.name = name
         self.image_size = image_size
         self.anchors = anchors
         self.batch_size = batch_size
         self.num_anchors = num_anchors
         self.learning_rate = learning_rate
-        self.gamma = gamma
-        self.alpha = alpha
+        self.num_classes = num_classes
+        # self.max_num_boxes_per_image = ((self.image_size // 32) *
+        #                                 (self.image_size // 32)
+        #                                 + (self.image_size // 16)
+        #                                 * (self.image_size // 16)
+        #                                 + (self.image_size // 8)
+        #                                 * (self.image_size // 8))
+        self.max_num_boxes_per_image = max_num_boxes_per_image
+        self.num_id1 = num_id1
+        self.num_id2 = num_id2
+        self.num_id3 = num_id3
+        self.num_id4 = num_id4
+        self.num_id5 = num_id5
+        self.norm = norm
+        self.threshold = threshold
         self.is_training = tf.placeholder_with_default(True, [], name='is_training')
-        self.X = tf.placeholder(tf.float32, [self.batch_size, self.image_size, self.image_size, 3])
+        self.num_anchors_per_detector = self.num_anchors // 3
+        self.num_detectors_per_image = self.num_anchors_per_detector * ((self.image_size // 32) *
+                                                                        (self.image_size // 32)
+                                                                        + (self.image_size // 16)
+                                                                        * (self.image_size // 16)
+                                                                        + (self.image_size // 8)
+                                                                        * (self.image_size // 8))
 
-        self.Y_7 = tf.placeholder(tf.float32, [self.batch_size, self.image_size // 128, self.image_size // 128,
-                                               self.num_anchors * 5])
-        self.Y_6 = tf.placeholder(tf.float32, [self.batch_size, self.image_size // 64, self.image_size // 64,
-                                               self.num_anchors * 5])
-        self.Y_5 = tf.placeholder(tf.float32, [self.batch_size, self.image_size // 32, self.image_size // 32,
-                                               self.num_anchors * 5])
-        self.Y_4 = tf.placeholder(tf.float32, [self.batch_size, self.image_size // 16, self.image_size // 16,
-                                               self.num_anchors * 5])
-        self.Y_3 = tf.placeholder(tf.float32, [self.batch_size, self.image_size // 8, self.image_size // 8,
-                                               self.num_anchors * 5])
+        self.X = tf.placeholder(tf.float32, [None, self.image_size, self.image_size, 3])
 
-        arg_scope = nets.resnet_v2.resnet_arg_scope()
-        with slim.arg_scope(arg_scope):
-            _, self.end_points = nets.resnet_v2.resnet_v2_50(self.X, num_classes=None,
-                                                             is_training=True)
+        self.Y_true_data = tf.placeholder(dtype=tf.float32,
+                                          shape=[None, self.num_detectors_per_image, self.num_classes + 5])
 
-        self.retina = RETINANETSUBNET('retinanet', is_training=self.is_training,
-                                      num_anchors=self.num_anchors)
+        self.Y_true_boxes = tf.placeholder(dtype=tf.float32,
+                                           shape=[None,
+                                                  self.max_num_boxes_per_image * self.num_anchors_per_detector, 4])
 
-    def compute_detector_subnet_regression_loss(self, bboxes_predictions, labels, output_size=(32, 32), idx=0):
-        w, h = output_size
-        b = len(self.anchors[idx])
-        anchors = tf.constant(self.anchors[idx], dtype=tf.float32)
-        anchors = tf.reshape(anchors, [1, 1, b, 2])
-        labels = tf.reshape(labels, [-1, h * w, b, 5])
-        _coords = labels[:, :, :, 0: 4]
-        _confs = labels[:, :, :, 4]
+        self.darknet = Darknet('darknet', is_training=self.is_training, num_id1=self.num_id1,
+                               num_id2=self.num_id2, num_id3=self.num_id3,
+                               num_id4=self.num_id4, num_id5=self.num_id5,
+                               norm=self.norm)
 
-        c_x, c_y = list(range(w)), list(range(h))
-        bs = list(range(self.batch_size))
-        na = list(range(b))
-        c_x, c_y = tf.meshgrid(c_x, c_y)
-        c_x, _ = tf.meshgrid(c_x, bs)
-        c_x, _ = tf.meshgrid(c_x, na)
-        c_y, _ = tf.meshgrid(c_y, bs)
-        c_y, _ = tf.meshgrid(c_y, na)
-        c_x = tf.transpose(tf.reshape(c_x, [-1, 9, w * h]), [0, 2, 1])
-        c_y = tf.transpose(tf.reshape(c_y, [-1, 9, w * h]), [0, 2, 1])
-        center_grid = tf.stack([c_x, c_y], axis=3)
+        self.yolo_v3 = Yolov3('yolo_v3', is_training=self.is_training,
+                              num_classes=self.num_classes, anchors=self.anchors,
+                              norm=self.norm, image_size=self.image_size,
+                              training=self.training)
 
-        _wh = tf.pow(_coords[:, :, :, 2: 4], 2) * np.reshape([w, h], [1, 1, 1, 2])
-        _areas = _wh[:, :, :, 0] * _wh[:, :, :, 1]
-        _centers = _coords[:, :, :, 0: 2]
-        _up_left, _down_right = _centers - (_wh * 0.5), _centers + (_wh * 0.5)
-        # truths = tf.concat([_coords, tf.expand_dims(_confs, -1)], axis=3)
+    def yolo_v3_loss(self, yolo_out):
 
-        bboxes_predictions = tf.reshape(bboxes_predictions, [-1, h, w, b, 4])
-        coords = tf.reshape(bboxes_predictions[:, :, :, :, 0: 4], [-1, h * w, b, 4])
-        coords_xy = tf.nn.sigmoid(coords[:, :, :, 0: 2])
-        coords_wh = tf.sqrt(tf.exp(coords[:, :, :, 2: 4]) * anchors / np.reshape([w, h], [1, 1, 1, 2]))
-        coords = tf.concat([coords_xy, coords_wh], axis=3)
+        def yolo_loss_for_each_scale(yolo_layer_outputs, conv_layer_outputs,
+                                     yolo_true, yolo_true_boxes, ignore_thresh, anchors,
+                                     num_classes=3, h=416, w=416, batch_size=16):
 
-        # preds = tf.concat([coords, confs], axis=3)
+            def iou(yolo_out_pred, yolo_true_boxes_, shape_, batch_size_=16):
+                yolo_true_boxes_ = tf.reshape(yolo_true_boxes_, [batch_size_, -1, 4])
+                yolo_true_boxes_ = tf.expand_dims(yolo_true_boxes_, axis=1)
+                true_coords_xy = yolo_true_boxes_[:, :, :, 0: 2]
+                true_coords_wh = yolo_true_boxes_[:, :, :, 2: 4]
+                true_up_left = true_coords_xy - true_coords_wh * 0.5
+                true_down_right = true_coords_xy + true_coords_wh * 0.5
 
-        wh = tf.pow(coords[:, :, :, 2: 4], 2) * np.reshape([w, h], [1, 1, 1, 2])
-        areas = wh[:, :, :, 0] * wh[:, :, :, 1]
-        centers = coords[:, :, :, 0: 2] + tf.cast(center_grid, tf.float32)
-        up_left, down_right = centers - (wh * 0.5), centers + (wh * 0.5)
+                true_area = true_coords_wh[:, :, :, 0] * true_coords_wh[:, :, :, 1]
 
-        inter_upleft = tf.maximum(up_left, _up_left)
-        inter_downright = tf.minimum(down_right, _down_right)
-        inter_wh = tf.maximum(inter_downright - inter_upleft, 0.0)
-        intersects = inter_wh[:, :, :, 0] * inter_wh[:, :, :, 1]
-        ious = tf.truediv(intersects, areas + _areas - intersects)
+                yolo_out_pred = tf.reshape(yolo_out_pred, [-1, shape_[1] * shape_[2] * shape_[3], 4])
+                yolo_out_pred = tf.expand_dims(yolo_out_pred, axis=-2)
+                pred_coords_xy = yolo_out_pred[:, :, :, 0: 2]
+                pred_coords_wh = yolo_out_pred[:, :, :, 2: 4]
+                pred_up_left = pred_coords_wh - pred_coords_wh * 0.5
+                pred_down_right = pred_coords_xy + pred_coords_wh * 0.5
 
-        best_iou_mask = tf.equal(ious, tf.reduce_max(ious, axis=2, keep_dims=True))
-        best_iou_mask = tf.cast(best_iou_mask, tf.float32)
-        mask = best_iou_mask * _confs
-        mask = tf.expand_dims(mask, -1)
+                pred_area = pred_coords_wh[:, :, :, 0] * pred_coords_wh[:, :, :, 1]
 
-        coors_loss = tf.reduce_mean(tf.reduce_sum(tf.square(coords - _coords) * mask, axis=[1, 2, 3]))
-        return coors_loss
+                intersects_up_left = tf.maximum(true_up_left, pred_up_left)
+                intersects_down_right = tf.minimum(true_down_right, pred_down_right)
 
-    def compute_detector_subnet_classification_loss(self, confs_predictions, labels, output_size=(32, 32), idx=1):
-        w, h = output_size
+                intersects_wh = tf.maximum(intersects_down_right - intersects_up_left, 0.0)
 
-        b = len(self.anchors[idx])
-        labels = tf.reshape(labels, [-1, h * w, b, 5])
-        _confs = labels[:, :, :, 4]
+                intersects_area = intersects_wh[:, :, :, 0] * intersects_wh[:, :, :, 1]
 
-        confs_predictions = tf.reshape(confs_predictions, [-1, h, w, b])
-        confs = tf.nn.sigmoid(confs_predictions)
-        confs = tf.reshape(confs, [-1, h * w, b])
+                iou_ = intersects_area / (pred_area + true_area - intersects_area)
 
-        confs_w = tf.where(tf.equal(_confs, tf.ones_like(_confs)),
-                           self.alpha * tf.pow(tf.ones_like(confs) - confs, self.gamma),
-                           (1 - self.alpha) * tf.pow(confs, self.gamma))
-        confs_loss = -tf.reduce_mean(
-            tf.reduce_sum(tf.multiply(tf.where(tf.equal(_confs, tf.ones_like(_confs)), tf.log(confs),
-                                               tf.log(tf.ones_like(confs) - confs)), confs_w), axis=[1, 2]))
-        return confs_loss
+                return tf.reduce_max(iou_, axis=-1)
 
-    def detector_subnet_loss(self, bboxes_predictions, confs_predictions):
-        total_reg_loss = 0.0
-        total_confs_loss = 0.0
+            num_anchors = len(anchors)
+            shape = yolo_layer_outputs.get_shape().as_list()
 
-        labels = [self.Y_3, self.Y_4, self.Y_5, self.Y_6, self.Y_7]
+            yolo_out_pred_rela = yolo_layer_outputs[..., 0: 4] / tf.cast(tf.constant([w, h, w, h]), tf.float32)
 
-        for i, bbox in enumerate(bboxes_predictions):
-            shape = bbox.get_shape().as_list()
-            label, conf = labels[i], confs_predictions[i]
-            total_reg_loss += self.compute_detector_subnet_regression_loss(bbox, label,
-                                                                           output_size=(shape[1], shape[2]), idx=i)
-            total_confs_loss += self.compute_detector_subnet_classification_loss(conf, label,
-                                                                                 output_size=(shape[1], shape[2]),
-                                                                                 idx=i)
-        return total_reg_loss, total_confs_loss
+            conv_layer_outputs = tf.reshape(conv_layer_outputs, [-1, shape[1], shape[2], shape[3], shape[4]])
+            pred_conf = conv_layer_outputs[..., 4: 5]
+            # pred_class = conv_layer_outputs[..., 5:]
 
-    def retina_subnet_optimizer(self, reg_loss, conf_loss):
+            yolo_true = tf.reshape(yolo_true, [-1, shape[1], shape[2], shape[3], shape[4]])
+            percent_x, percent_y, percent_w, percent_h, obj_mask, classes = tf.split(yolo_true,
+                                                                                     [1, 1, 1, 1, 1, num_classes],
+                                                                                     axis=-1)
+
+            clustroid_x = tf.tile(tf.reshape(tf.range(shape[2], dtype=tf.float32), [1, -1, 1, 1]), [shape[2], 1, 1, 1])
+            clustroid_y = tf.tile(tf.reshape(tf.range(shape[1], dtype=tf.float32), [-1, 1, 1, 1]), [1, shape[1], 1, 1])
+            converted_x_true = percent_x * shape[2] - clustroid_x
+            converted_y_true = percent_y * shape[1] - clustroid_y
+
+            anchors = tf.constant(anchors, dtype=tf.float32)
+            anchors_w = tf.reshape(anchors[:, 0], [1, 1, 1, num_anchors, 1])
+            anchors_h = tf.reshape(anchors[:, 1], [1, 1, 1, num_anchors, 1])
+
+            converted_w_true = tf.log((percent_w / anchors_w) * w)
+            converted_h_true = tf.log((percent_h / anchors_h) * h)
+
+            yolo_raw_box_true = tf.concat([converted_x_true, converted_y_true, converted_w_true, converted_h_true],
+                                          axis=-1)
+            yolo_raw_box_true = tf.where(tf.is_inf(yolo_raw_box_true),
+                                         tf.zeros_like(yolo_raw_box_true),
+                                         yolo_raw_box_true)
+
+            box_loss_scale = 2 - yolo_true[..., 2: 3] * yolo_true[..., 3: 4]
+
+            coords_xy_loss = (tf.nn.sigmoid_cross_entropy_with_logits(labels=yolo_raw_box_true[..., 0: 2],
+                                                                      logits=conv_layer_outputs[..., 0: 2])
+                              * obj_mask * box_loss_scale)
+            coords_xy_loss = tf.reduce_sum(coords_xy_loss)
+
+            coords_wh_loss = tf.square(yolo_raw_box_true[..., 2: 4]
+                                       - conv_layer_outputs[..., 2: 4]) * 0.5 * obj_mask * box_loss_scale
+
+            coords_wh_loss = tf.reduce_sum(coords_wh_loss)
+
+            coords_loss = coords_xy_loss + coords_wh_loss
+
+            box_iou = iou(yolo_out_pred_rela, yolo_true_boxes, shape, batch_size)
+
+            ignore_mask = tf.cast(tf.less(box_iou, ignore_thresh * tf.ones_like(box_iou)), tf.float32)
+            ignore_mask = tf.reshape(ignore_mask, [-1, shape[1], shape[2], num_anchors])
+            ignore_mask = tf.expand_dims(ignore_mask, -1)
+
+            back_loss = ((1 - obj_mask)
+                         * tf.nn.sigmoid_cross_entropy_with_logits(labels=obj_mask, logits=pred_conf) * ignore_mask)
+            back_loss = tf.reduce_sum(back_loss)
+
+            fore_loss = obj_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=obj_mask, logits=pred_conf)
+
+            fore_loss = tf.reduce_sum(fore_loss)
+
+            conf_loss = back_loss + fore_loss
+
+            # cls_loss = obj_mask * tf.nn.sigmoid_cross_entropy_with_logits(labels=classes, logits=pred_class)
+            # cls_loss = tf.reduce_sum(cls_loss)
+
+            return coords_loss + conf_loss
+
+        num_anchors_per_detector = len(self.anchors) // 3
+        max_num_boxes_per_image = self.Y_true_boxes.shape[1] // 3
+
+        num_large_detectors = int((self.image_size / 32) * (self.image_size / 32) * num_anchors_per_detector)
+        num_medium_detectors = int((self.image_size / 16) * (self.image_size / 16) * num_anchors_per_detector)
+
+        large_yolo_true_raw = self.Y_true_data[:, :num_large_detectors, :]
+        medium_yolo_true_raw = self.Y_true_data[:, num_large_detectors: num_medium_detectors + num_large_detectors, :]
+        small_yolo_true_raw = self.Y_true_data[:, num_medium_detectors + num_large_detectors:, :]
+
+        large_yolo_true_boxes = self.Y_true_boxes[:, :max_num_boxes_per_image, :]
+        medium_yolo_true_boxes = self.Y_true_boxes[:, max_num_boxes_per_image: 2*max_num_boxes_per_image, :]
+        small_yolo_true_boxes = self.Y_true_boxes[:, 2*max_num_boxes_per_image:, :]
+
+        yolo_layer_outputs_ = yolo_out[:3]
+        conv_layer_outputs_ = yolo_out[3:]
+
+        large_yolo_pred_boxes = yolo_layer_outputs_[0]
+        medium_yolo_pred_boxes = yolo_layer_outputs_[1]
+        small_yolo_pred_boxes = yolo_layer_outputs_[2]
+
+        large_yolo_pred_raw = conv_layer_outputs_[0]
+        medium_yolo_pred_raw = conv_layer_outputs_[1]
+        small_yolo_pred_raw = conv_layer_outputs_[2]
+
+        large_obj_loss = yolo_loss_for_each_scale(large_yolo_pred_boxes, large_yolo_pred_raw,
+                                                  large_yolo_true_raw, large_yolo_true_boxes,
+                                                  ignore_thresh=self.threshold,
+                                                  anchors=self.anchors[num_anchors_per_detector*2:],
+                                                  num_classes=self.num_classes, h=self.image_size,
+                                                  w=self.image_size,
+                                                  batch_size=self.batch_size
+                                                  )
+
+        medium_obj_loss = yolo_loss_for_each_scale(medium_yolo_pred_boxes, medium_yolo_pred_raw,
+                                                   medium_yolo_true_raw, medium_yolo_true_boxes,
+                                                   ignore_thresh=self.threshold,
+                                                   anchors=self.anchors[num_anchors_per_detector:
+                                                                        2*num_anchors_per_detector],
+                                                   num_classes=self.num_classes, h=self.image_size,
+                                                   w=self.image_size,
+                                                   batch_size=self.batch_size
+                                                   )
+
+        small_obj_loss = yolo_loss_for_each_scale(small_yolo_pred_boxes, small_yolo_pred_raw,
+                                                  small_yolo_true_raw, small_yolo_true_boxes,
+                                                  ignore_thresh=self.threshold,
+                                                  anchors=self.anchors[:num_anchors_per_detector],
+                                                  num_classes=self.num_classes, h=self.image_size,
+                                                  w=self.image_size,
+                                                  batch_size=self.batch_size
+                                                  )
+
+        return (large_obj_loss + medium_obj_loss + small_obj_loss) / self.batch_size
+
+    def yolo_v3_optimizer(self, yolo_loss):
         def make_optimizer(loss, variables, name='Adam'):
             global_step = tf.Variable(0, trainable=False)
             starter_learning_rate = self.learning_rate
             end_learning_rate = 0.0
-            start_decay_step = 50000
-            decay_steps = 50000
+            start_decay_step = 100000
+            decay_steps = 100000
             learning_rate = (
                 tf.where(
                     tf.greater_equal(global_step, start_decay_step),
@@ -156,46 +254,138 @@ class DETECTERSUBNET:
                 minimize(loss, global_step=global_step, var_list=variables)
             )
             return learning_step
+        trainable_var_list = tf.trainable_variables()
+        last_layer_var_list = [i for i in trainable_var_list if
+                               i.shape[-1] == (5 + self.num_classes) * self.num_anchors_per_detector]
+        last_layer_optimizer = make_optimizer(yolo_loss, last_layer_var_list)
+        yolo_optimizer = make_optimizer(yolo_loss, trainable_var_list)
 
-        resnet50_var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='resnet_v2_50')
-        retina_class_subnet_var_list = [self.retina.class_var_list, self.retina.retina_var_list, resnet50_var_list]
-        retina_reg_subnet_var_list = [self.retina.reg_var_list, self.retina.retina_var_list, resnet50_var_list]
-        retina_reg_subnet_optimizer = make_optimizer(reg_loss, retina_reg_subnet_var_list)
-        retina_class_subnet_optimizer = make_optimizer(conf_loss, retina_class_subnet_var_list)
+        return last_layer_optimizer, yolo_optimizer
 
-        with tf.control_dependencies([retina_reg_subnet_optimizer, retina_class_subnet_optimizer]):
-            return tf.no_op(name='optimizers')
+    def coords_to_boxes(self, yolo_boxes_out, is_pred=True):
+
+        x_pred, y_pred, w_pred, h_pred, confs_pred, classes_pred = tf.split(yolo_boxes_out,
+                                                                            [1, 1, 1, 1, 1,
+                                                                             self.num_classes],
+                                                                            axis=-1)
+        if is_pred:
+            x_pred = x_pred / self.image_size
+            y_pred = y_pred / self.image_size
+            w_pred = w_pred / self.image_size
+            h_pred = h_pred / self.image_size
+
+        up_left_x = x_pred - w_pred / 2.0
+        up_left_y = y_pred - h_pred / 2.0
+        down_right_x = x_pred + w_pred / 2.0
+        down_right_y = y_pred + h_pred / 2.0
+
+        detections = tf.concat([up_left_x, up_left_y, down_right_x, down_right_y, confs_pred, classes_pred], axis=-1)
+
+        return detections
+
+    def draw_boxes(self, yolo_out):
+        yolo_boxes_out = yolo_out[:3]
+
+        yolo_boxes_out_large_obj = yolo_boxes_out[0]
+        yolo_boxes_out_medium_obj = yolo_boxes_out[1]
+        yolo_boxes_out_small_obj = yolo_boxes_out[2]
+
+        yolo_boxes_out_large_obj = tf.reshape(yolo_boxes_out_large_obj, [self.batch_size, -1, self.num_classes + 5])
+        yolo_boxes_out_medium_obj = tf.reshape(yolo_boxes_out_medium_obj, [self.batch_size, -1,
+                                                                           self.num_classes + 5])
+        yolo_boxes_out_small_obj = tf.reshape(yolo_boxes_out_small_obj, [self.batch_size, -1, self.num_classes + 5])
+
+        yolo_boxes_out = tf.concat([yolo_boxes_out_large_obj, yolo_boxes_out_medium_obj, yolo_boxes_out_small_obj],
+                                   axis=1)
+
+        detections = self.coords_to_boxes(yolo_boxes_out)
+        confs_pred = detections[:, :, 4]
+
+        conf_mask = tf.cast(tf.expand_dims(tf.greater(confs_pred,
+                                                      tf.ones_like(confs_pred) * self.confidence_score), -1),
+                            tf.float32)
+        predictions = detections * conf_mask
+
+        pred_images = []
+
+        for i in range(self.batch_size):
+            conf_pred = predictions[i, :, 4]
+            boxes_pred = predictions[i, :, 0: 4]
+            up_left_x, up_left_y, down_right_x, down_right_y = tf.split(boxes_pred, [1, 1, 1, 1], axis=-1)
+
+            boxes_pred = tf.concat([up_left_y, up_left_x, down_right_y, down_right_x], axis=-1)
+
+            top_k_scores, top_k_indices = tf.nn.top_k(conf_pred, k=60)
+            boxes_pred = tf.gather(boxes_pred, top_k_indices)
+
+            desired_indices = tf.image.non_max_suppression(boxes_pred, top_k_scores, max_output_size=6)
+
+            desired_boxes = tf.gather(boxes_pred, desired_indices)
+
+            desired_boxes = tf.expand_dims(desired_boxes, axis=0)
+
+            desired_boxes = tf.where(tf.less(desired_boxes, tf.zeros_like(desired_boxes)),
+                                     tf.zeros_like(desired_boxes), desired_boxes)
+
+            desired_boxes = tf.where(tf.greater(desired_boxes, tf.ones_like(desired_boxes)),
+                                     tf.ones_like(desired_boxes), desired_boxes)
+
+            pred_images.append(tf.image.draw_bounding_boxes(tf.expand_dims(self.X[i, :, :, :], axis=0), desired_boxes))
+
+        pred_images = tf.concat(pred_images, axis=0)
+
+        return pred_images
+
+    def draw_true_boxes(self):
+
+        yolo_true_data = self.coords_to_boxes(self.Y_true_data, is_pred=False)
+
+        yolo_true_images = []
+
+        for i in range(self.batch_size):
+            conf_true = yolo_true_data[i, :, 4]
+            boxes_true = yolo_true_data[i, :, 0: 4]
+
+            up_left_x, up_left_y, down_right_x, down_right_y = tf.split(boxes_true, [1, 1, 1, 1], axis=-1)
+
+            boxes_true = tf.concat([up_left_y, up_left_x, down_right_y, down_right_x], axis=-1)
+
+            top_k_scores, top_k_indices = tf.nn.top_k(conf_true, k=20)
+
+            boxes_true = tf.gather(boxes_true, top_k_indices)
+
+            boxes_true = tf.expand_dims(boxes_true, axis=0)
+
+            yolo_true_images.append(tf.image.draw_bounding_boxes(tf.expand_dims(self.X[i, :, :, :], axis=0),
+                                                                 boxes_true))
+
+        yolo_true_images = tf.concat(yolo_true_images, axis=0)
+
+        return yolo_true_images
 
     def model(self):
-        res_block_c3, res_block_c4, res_block_c5 = \
-            self.end_points['resnet_v2_50/block2/unit_3/bottleneck_v2'], \
-            self.end_points['resnet_v2_50/block3/unit_4/bottleneck_v2'], \
-            self.end_points['resnet_v2_50/block4']
 
-        retina_class_subnet_output3, retina_class_subnet_output4, retina_class_subnet_output5, \
-            retina_class_subnet_output6, retina_class_subnet_output7, retina_bboxreg_subnet_output3, \
-            retina_bboxreg_subnet_output4, retina_bboxreg_subnet_output5, retina_bboxreg_subnet_output6, \
-            retina_bboxreg_subnet_output7 = self.retina(res_block_c3, res_block_c4, res_block_c5)
+        dark_out, dark_route_1, dark_route_2 = self.darknet(self.X)
 
-        bboxes_predictions = [retina_bboxreg_subnet_output3, retina_bboxreg_subnet_output4,
-                              retina_bboxreg_subnet_output5, retina_bboxreg_subnet_output6,
-                              retina_bboxreg_subnet_output7]
-        confs_predictions = [retina_class_subnet_output3, retina_class_subnet_output4,
-                             retina_class_subnet_output5, retina_class_subnet_output6,
-                             retina_class_subnet_output7]
-        reg_loss, confs_loss = self.detector_subnet_loss(bboxes_predictions, confs_predictions)
+        yolo_out = self.yolo_v3(dark_out, dark_route_1, dark_route_2)
 
-        tf.summary.scalar('reg_loss', reg_loss)
-        tf.summary.scalar('confs_loss', confs_loss)
+        loss = self.yolo_v3_loss(yolo_out)
 
-        tf.summary.image('origin_image', utils.batch_convert2int(self.X))
+        tf.summary.scalar('loss', loss)
 
-        return reg_loss, confs_loss
+        origin_images = self.draw_true_boxes()
+
+        tf.summary.image('origin_images', origin_images)
+
+        pred_images = self.draw_boxes(yolo_out)
+
+        tf.summary.image('prediction_images', pred_images)
+
+        return loss
 
     def out(self):
-        res_block_c3, res_block_c4, res_block_c5 = \
-            self.end_points['resnet_v2_50/block2/unit_3/bottleneck_v2'], \
-            self.end_points['resnet_v2_50/block3/unit_4/bottleneck_v2'], \
-            self.end_points['resnet_v2_50/block4']
+        dark_out, dark_route_1, dark_route_2 = self.darknet(self.X)
 
-        return self.retina(res_block_c3, res_block_c4, res_block_c5)
+        yolo_out = self.yolo_v3(dark_out, dark_route_1, dark_route_2)
+
+        return yolo_out

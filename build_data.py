@@ -6,7 +6,7 @@ import cv2
 
 FLAGS = tf.flags.FLAGS
 
-tf.flags.DEFINE_string('train_input_dir', 'data/train',
+tf.flags.DEFINE_string('train_input_dir', '../MultiPoseNet-tensorflow/data/train',
                        'train input directory, default: data/train')
 
 tf.flags.DEFINE_string('output_dir', 'data/tfrecords/train.tfrecords',
@@ -123,6 +123,7 @@ def data_writer(train_input_dir, output_file):
 def main(unused_argv):
     print("Convert train and label to tfrecords...")
     data_writer(FLAGS.train_input_dir, FLAGS.output_dir)
+    vars(unused_argv)
 
 
 if __name__ == '__main__':

@@ -60,3 +60,26 @@ class ImagePool:
                 return tmp
             else:
                 return image
+
+
+def get_anchors(anchors_path):
+    """
+    Reads the anchors from a file and returns them in a list.
+
+    Parameters
+    ----------
+    anchors_path : string
+        Path that points to where the anchor information is stored.
+
+    Returns
+    -------
+    anchors : list
+        A list of format:
+        [[anchor1_width, anchor1_height], [anchor2_width, anchor2_height], [anchor3_width, anchor3_height], ...]
+    """
+    with open(anchors_path) as f:
+        anchors = f.readline()
+    anchors = [float(x) for x in anchors.split(',')]
+    anchors = list(zip(anchors[::2], anchors[1::2]))
+
+    return anchors

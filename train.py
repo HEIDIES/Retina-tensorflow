@@ -5,16 +5,16 @@ from datetime import datetime
 import os
 import logging
 import json_convert
-# import numpy as np
+import utils
 import labels_generator
 import hyper_parameters
-import anchors_generator
+import numpy as np
 train_mode = True
 
 
-def train_retina_subnet():
-    if hyper_parameters.FLAGS.load_model_retina is not None:
-        checkpoints_dir = "checkpoints/" + hyper_parameters.FLAGS.load_model_retina.lstrip("checkpoints/")
+def train_yolo_v3():
+    if hyper_parameters.FLAGS.load_model is not None:
+        checkpoints_dir = "checkpoints/" + hyper_parameters.FLAGS.load_model.lstrip("checkpoints/")
     else:
         current_time = datetime.now().strftime("%Y%m%d-%H%M")
         checkpoints_dir = "checkpoints/{}".format(current_time)
@@ -24,26 +24,30 @@ def train_retina_subnet():
             pass
 
     labels = json_convert.load_label(hyper_parameters.FLAGS.labels_file)
-    anchors = anchors_generator.generate_anchors()
+    anchors = utils.get_anchors(hyper_parameters.FLAGS.anchors_path)
+    anchors = np.array(anchors, dtype=np.float32)
     tf.reset_default_graph()
     graph = tf.Graph()
     with graph.as_default():
-        retina = DETECTERSUBNET('retina_subnet',
-                                hyper_parameters.FLAGS.image_size_retina,
-                                anchors,
-                                batch_size=hyper_parameters.FLAGS.batch_size,
-                                num_anchors=hyper_parameters.FLAGS.num_anchors,
-                                learning_rate=hyper_parameters.FLAGS.learning_rate_retina,
-                                gamma=hyper_parameters.FLAGS.gamma,
-                                alpha=hyper_parameters.FLAGS.alpha
-                                )
+        yolo_v3 = DETECTERSUBNET('yolo_v3',
+                                 image_size=hyper_parameters.FLAGS.image_size,
+                                 anchors=anchors,
+                                 batch_size=hyper_parameters.FLAGS.batch_size,
+                                 num_anchors=hyper_parameters.FLAGS.num_anchors,
+                                 learning_rate=hyper_parameters.FLAGS.learning_rate,
+                                 num_classes=hyper_parameters.FLAGS.num_classes,
+                                 num_id1=hyper_parameters.FLAGS.num_id1,
+                                 num_id2=hyper_parameters.FLAGS.num_id2,
+                                 num_id3=hyper_parameters.FLAGS.num_id3,
+                                 num_id4=hyper_parameters.FLAGS.num_id4,
+                                 num_id5=hyper_parameters.FLAGS.num_id5,
+                                 norm=hyper_parameters.FLAGS.norm,
+                                 threshold=hyper_parameters.FLAGS.threshold,
+                                 max_num_boxes_per_image=hyper_parameters.FLAGS.max_num_boxes_per_image
+                                 )
 
-        res50_var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='resnet_v2_50')
-        saver_res50 = tf.train.Saver(res50_var_list)
-
-        reg_loss, confs_loss = retina.model()
-        retina_subnet_output = retina.out()
-        optimizer = retina.retina_subnet_optimizer(reg_loss, confs_loss)
+        loss = yolo_v3.model()
+        last_layer_optimizer, yolo_optimizer = yolo_v3.yolo_v3_optimizer(loss)
 
         saver = tf.train.Saver()
 
@@ -60,7 +64,7 @@ def train_retina_subnet():
                 train_writer = tf.summary.FileWriter(checkpoints_dir, graph)
 
             with tf.Session(graph=graph, config=config) as sess:
-                if hyper_parameters.FLAGS.load_model_retina is not None:
+                if hyper_parameters.FLAGS.load_model is not None:
                     checkpoint = tf.train.get_checkpoint_state(checkpoints_dir)
                     meta_graph_path = checkpoint.model_checkpoint_path + ".meta"
                     restore = tf.train.import_meta_graph(meta_graph_path)
@@ -68,33 +72,33 @@ def train_retina_subnet():
                     step = int(meta_graph_path.split("-")[2].split(".")[0])
                 else:
                     sess.run(tf.global_variables_initializer())
-                    saver_res50.restore(sess, hyper_parameters.FLAGS.pretrained_model_checkpoints)
                     step = 0
 
                 coord = tf.train.Coordinator()
                 threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
                 try:
-                    while not coord.should_stop() and step < 100000:
+                    while not coord.should_stop() and step < 200000:
 
-                        images, img_ids, img_widths, img_heights = sess.run([x, image_ids,
+                        images, img_ids, img_heights, img_widths = sess.run([x, image_ids,
                                                                              image_heights, image_widths])
                         heatmaps = labels_generator.get_detector_heatmap(img_ids, img_heights, img_widths, labels)
-                        _, reg_loss_val, confs_loss_val, summary = sess.run([optimizer,
-                                                                            reg_loss, confs_loss,
-                                                                            summary_op],
-                                                                            feed_dict={retina.X: images,
-                                                                                       retina.Y_3: heatmaps[0],
-                                                                                       retina.Y_4: heatmaps[1],
-                                                                                       retina.Y_5: heatmaps[2],
-                                                                                       retina.Y_6: heatmaps[3],
-                                                                                       retina.Y_7: heatmaps[4]})
+
+                        optimizer = yolo_optimizer
+
+                        if step < 10000 // 3:
+                            optimizer = last_layer_optimizer
+                        _, loss_val, summary = sess.run([optimizer, loss, summary_op],
+                                                        feed_dict={yolo_v3.X: images,
+                                                                   yolo_v3.Y_true_data: heatmaps[0],
+                                                                   yolo_v3.Y_true_boxes: heatmaps[1]}
+                                                        )
+
                         train_writer.add_summary(summary, step)
                         train_writer.flush()
                         if (step + 1) % 100 == 0:
                             logging.info('-----------Step %d:-------------' % (step + 1))
-                            logging.info('  reg_loss   : {}'.format(reg_loss_val))
-                            logging.info('  confs_loss   : {}'.format(confs_loss_val))
+                            logging.info('  loss   : {}'.format(loss_val))
 
                         if step % 10000 == 0:
                             save_path = saver.save(sess, checkpoints_dir + "/model.ckpt", global_step=step)
@@ -118,7 +122,8 @@ def train_retina_subnet():
 
 
 def main(unused_argv):
-    train_retina_subnet()
+    train_yolo_v3()
+    vars(unused_argv)
 
 
 if __name__ == '__main__':

@@ -35,7 +35,7 @@ class Darknet:
             dark_net_conv_2 = []
             for i in range(self.num_id2):
                 dark_net_conv_2.append(layer.dark_net_conv_2(dark_net_conv_2[-1] if i
-                                                             else  c3s2k128, i,
+                                                             else c3s2k128, i,
                                                              reuse=self.reuse,
                                                              is_training=self.is_training,
                                                              norm=self.norm))
@@ -82,5 +82,3 @@ class Darknet:
         self.reuse = True
         self.var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
         return dark_out, dark_net_route_1, dark_net_route_2
-
-
