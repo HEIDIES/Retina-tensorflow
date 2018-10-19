@@ -86,8 +86,8 @@ def train_yolo_v3():
 
                         optimizer = yolo_optimizer
 
-                        if step < 10000 // 3:
-                            optimizer = last_layer_optimizer
+                        # if step < 10000 // 3:
+                        #     optimizer = last_layer_optimizer
                         _, loss_val, summary = sess.run([optimizer, loss, summary_op],
                                                         feed_dict={yolo_v3.X: images,
                                                                    yolo_v3.Y_true_data: heatmaps[0],

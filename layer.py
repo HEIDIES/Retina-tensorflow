@@ -100,6 +100,7 @@ def yolo_1(ipt, num_classes, name='yolo_1', reuse=False, is_training=True, norm=
         c3s1k1024 = ops.conv2d(c1s1k512, 1024, 3, 1, 1, norm=norm, activation=activation,
                                name='c3s1k1024_3', reuse=reuse, is_training=is_training)
         large_obj_raw_detections = ops.conv2d(c3s1k1024, 3 * (num_classes + 5), 1, 0, 1, norm=None, activation=None,
+                                              use_bias=True,
                                               name='large_obj_raw_detections', reuse=reuse, is_training=is_training)
         return large_obj_raw_detections, yolo_route
 
@@ -125,6 +126,7 @@ def yolo_2(ipt1, ipt2, num_classes, name='yolo_2', reuse=False, is_training=True
         c3s1k512 = ops.conv2d(c1s1k256, 512, 3, 1, 1, norm=norm, activation=activation,
                               name='c3s1k512_3', reuse=reuse, is_training=is_training)
         medium_obj_raw_detections = ops.conv2d(c3s1k512, 3 * (num_classes + 5), 1, 0, 1, norm=None, activation=None,
+                                               use_bias=True,
                                                name='medium_obj_raw_detections', reuse=reuse, is_training=is_training)
         return medium_obj_raw_detections, yolo_route
 
@@ -150,6 +152,7 @@ def yolo_3(ipt1, ipt2, num_classes, name='yolo_3', reuse=False, is_training=True
         c3s1k256 = ops.conv2d(c1s1k128, 256, 3, 1, 1, norm=norm, activation=activation,
                               name='c3s1k256_3', reuse=reuse, is_training=is_training)
         small_obj_raw_detections = ops.conv2d(c3s1k256, 3 * (num_classes + 5), 1, 0, 1, norm=None, activation=None,
+                                              use_bias=True,
                                               name='medium_obj_raw_detections', reuse=reuse, is_training=is_training)
         return small_obj_raw_detections
 

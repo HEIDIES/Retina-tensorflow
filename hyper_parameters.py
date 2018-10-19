@@ -5,7 +5,7 @@ FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer('batch_size', 4, 'batch size, default: 1')
 tf.flags.DEFINE_integer('image_size', 416, 'image size, default: 256')
 tf.flags.DEFINE_float('learning_rate', 1e-3,
-                      'initial learning rate for Adam, default: 0.0001')
+                      'initial learning rate for Adam, default: 0.001')
 tf.flags.DEFINE_integer('num_id1', 1, 'number of dark_net_id1')
 tf.flags.DEFINE_integer('num_id2', 2, 'number of dark_net_id2')
 tf.flags.DEFINE_integer('num_id3', 8, 'number of dark_net_id3')
