@@ -46,14 +46,14 @@ def train_yolo_v3():
                                  max_num_boxes_per_image=hyper_parameters.FLAGS.max_num_boxes_per_image
                                  )
 
-        loss = yolo_v3.model()
-        last_layer_optimizer, yolo_optimizer = yolo_v3.yolo_v3_optimizer(loss)
-
-        saver = tf.train.Saver()
-
         reader = Reader(hyper_parameters.FLAGS.X, batch_size=hyper_parameters.FLAGS.batch_size,
                         image_size=hyper_parameters.FLAGS.image_size)
         x, image_ids, image_heights, image_widths = reader.feed()
+
+        loss = yolo_v3.model(x)
+        last_layer_optimizer, yolo_optimizer = yolo_v3.yolo_v3_optimizer(loss)
+
+        saver = tf.train.Saver()
 
         config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
         config.gpu_options.allow_growth = True
@@ -80,8 +80,8 @@ def train_yolo_v3():
                 try:
                     while not coord.should_stop() and step < 400000:
 
-                        images, img_ids, img_heights, img_widths = sess.run([x, image_ids,
-                                                                             image_heights, image_widths])
+                        img_ids, img_heights, img_widths = sess.run([image_ids,
+                                                                    image_heights, image_widths])
                         heatmaps = labels_generator.get_detector_heatmap(img_ids, img_heights, img_widths, labels)
 
                         optimizer = yolo_optimizer
@@ -89,7 +89,7 @@ def train_yolo_v3():
                         # if step < 100000 // 3:
                         #     optimizer = last_layer_optimizer
                         _, loss_val, summary = sess.run([optimizer, loss, summary_op],
-                                                        feed_dict={yolo_v3.X: images,
+                                                        feed_dict={
                                                                    yolo_v3.Y_true_data: heatmaps[0],
                                                                    yolo_v3.Y_true_boxes: heatmaps[1]}
                                                         )

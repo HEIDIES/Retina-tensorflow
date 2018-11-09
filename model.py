@@ -53,7 +53,7 @@ class DETECTERSUBNET:
                                                                         + (self.image_size // 8)
                                                                         * (self.image_size // 8))
 
-        self.X = tf.placeholder(tf.float32, [None, self.image_size, self.image_size, 3])
+        # self.X = tf.placeholder(tf.float32, [None, self.image_size, self.image_size, 3])
 
         self.Y_true_data = tf.placeholder(dtype=tf.float32,
                                           shape=[None, self.num_detectors_per_image, self.num_classes + 5])
@@ -350,7 +350,8 @@ class DETECTERSUBNET:
 
         return yolo_true_images
 
-    def model(self):
+    def model(self, ipt):
+        self.X = ipt
 
         dark_out, dark_route_1, dark_route_2 = self.darknet(self.X)
 
