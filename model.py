@@ -351,7 +351,8 @@ class DETECTERSUBNET:
         return yolo_true_images
 
     def model(self, ipt):
-        self.X = ipt
+        if not hasattr(self, 'X'):
+            self.X = ipt
 
         dark_out, dark_route_1, dark_route_2 = self.darknet(self.X)
 
