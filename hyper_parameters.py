@@ -26,3 +26,4 @@ tf.flags.DEFINE_string('norm', 'batch', 'norm method, default is batch')
 tf.flags.DEFINE_float('confidence_score', 0.5, 'threshold for confidence. default is 0.5')
 tf.flags.DEFINE_string('anchors_path', 'data/anchors.txt', 'The path that points towards where '
                                                            'the anchor values for the model are stored.')
+tf.flags.DEFINE_integer('GPU_COUNT', 1, '# of gpus.')

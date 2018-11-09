@@ -371,7 +371,10 @@ class DETECTERSUBNET:
 
         return loss
 
-    def out(self):
+    def out(self, ipt):
+        if not hasattr(self, 'X'):
+            self.X = ipt
+
         dark_out, dark_route_1, dark_route_2 = self.darknet(self.X)
 
         yolo_out = self.yolo_v3(dark_out, dark_route_1, dark_route_2)
