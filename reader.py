@@ -46,7 +46,21 @@ class Reader:
         return image_train, image_ids, image_heights, image_widths
 
     def _image_preprocess(self, image):
-        image = tf.image.resize_images(image, size=(self.image_size, self.image_size))
+        # image = tf.image.resize_images(image, size=(self.image_size, self.image_size))
+        h = tf.shape(image)[0]
+        w = tf.shape(image)[1]
+        scale = self.image_size / tf.maximum(h, w)
+        image = tf.image.resize_images(image,
+                                       size=(tf.round(tf.cast(h, tf.float64) * scale),
+                                             tf.round(tf.cast(w, tf.float64) * scale)))
+        h = tf.shape(image)[0]
+        w = tf.shape(image)[1]
+        top_pad = (self.image_size - h) // 2
+        bottom_pad = self.image_size - h - top_pad
+        left_pad = (self.image_size - w) // 2
+        right_pad = self.image_size - w - left_pad
+        padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
+        image = tf.pad(image, padding)
         image = utils.convert2float(image)
         image.set_shape([self.image_size, self.image_size, 3])
         return image

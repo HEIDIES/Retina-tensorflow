@@ -78,7 +78,7 @@ def train_yolo_v3():
                 threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
                 try:
-                    while not coord.should_stop() and step < 200000:
+                    while not coord.should_stop() and step < 400000:
 
                         images, img_ids, img_heights, img_widths = sess.run([x, image_ids,
                                                                              image_heights, image_widths])
@@ -86,7 +86,7 @@ def train_yolo_v3():
 
                         optimizer = yolo_optimizer
 
-                        # if step < 10000 // 3:
+                        # if step < 100000 // 3:
                         #     optimizer = last_layer_optimizer
                         _, loss_val, summary = sess.run([optimizer, loss, summary_op],
                                                         feed_dict={yolo_v3.X: images,

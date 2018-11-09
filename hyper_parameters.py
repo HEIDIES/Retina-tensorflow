@@ -17,7 +17,7 @@ tf.flags.DEFINE_string('X', 'data/tfrecords/train.tfrecords',
 tf.flags.DEFINE_string('labels_file', 'data/label/keypoint_train_annotations_20170909.json',
                        'labels file for training, default: data/label/keypoint_train_annotations_20170911.json')
 tf.flags.DEFINE_integer('num_anchors', 9, 'the number of anchors, default: 9')
-tf.flags.DEFINE_integer('num_classes', 1, 'the number of classes')
+tf.flags.DEFINE_integer('num_classes', 1 + 1, 'the number of classes')
 tf.flags.DEFINE_string('load_model', None,
                        'folder of saved model that you wish to continue training (e.g. 20170602-1936), default: None')
 tf.flags.DEFINE_float('threshold', 0.5, 'Impacts how the loss is calculated. '

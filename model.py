@@ -233,20 +233,7 @@ class DETECTERSUBNET:
     def yolo_v3_optimizer(self, yolo_loss):
         def make_optimizer(loss, variables, name='Adam'):
             global_step = tf.Variable(0, trainable=False)
-            starter_learning_rate = self.learning_rate
-            end_learning_rate = 0.0
-            start_decay_step = 100000
-            decay_steps = 100000
-            learning_rate = (
-                tf.where(
-                    tf.greater_equal(global_step, start_decay_step),
-                    tf.train.polynomial_decay(starter_learning_rate, tf.cast(global_step, tf.int32)
-                                              - start_decay_step,
-                                              decay_steps, end_learning_rate,
-                                              power=1.0),
-                    starter_learning_rate
-                )
-            )
+            learning_rate = self.learning_rate
             tf.summary.scalar('learning_rate/{}'.format(name), learning_rate)
 
             learning_step = (

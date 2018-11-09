@@ -8,9 +8,13 @@ import utils
 
 
 def build_data(label, image_height, image_width, max_boxes=5):
+    # scale_h, scale_w = hyper_parameters.FLAGS.image_size / image_height, \
+    #                    hyper_parameters.FLAGS.image_size / image_width
+    scale = hyper_parameters.FLAGS.image_size / max(image_height, image_width)
 
-    scale_h, scale_w = hyper_parameters.FLAGS.image_size / image_height, \
-                       hyper_parameters.FLAGS.image_size / image_width
+    top_pad = (hyper_parameters.FLAGS.image_size - round(image_height * scale)) // 2
+
+    left_pad = (hyper_parameters.FLAGS.image_size - round(image_width * scale)) // 2
 
     boxes = np.array([np.array(label[0][key] + [1]) for key in label[0]])
 
@@ -19,8 +23,9 @@ def build_data(label, image_height, image_width, max_boxes=5):
         np.random.shuffle(boxes)
         if len(boxes) > max_boxes:
             boxes = boxes[:max_boxes]
-        boxes[:, [0, 2]] = boxes[:, [0, 2]] * scale_w
-        boxes[:, [1, 3]] = boxes[:, [1, 3]] * scale_h
+        boxes[:, 0] = boxes[:, 0] * scale + left_pad
+        boxes[:, 2] = boxes[:, 2] * scale + left_pad
+        boxes[:, [1, 3]] = boxes[:, [1, 3]] * scale + top_pad
         boxes_data[:len(boxes)] = boxes
 
     return boxes_data
@@ -43,17 +48,17 @@ def get_detector_heatmap(image_ids, image_heights, image_widths, labels):
         boxes_data_mask = np.expand_dims(boxes_data_mask, -1)
         boxes_data_ = boxes_data_ * boxes_data_mask
 
-        i = np.floor(boxes_data_[:, :, 1] * grid_size[0]).astype('int32')
+        i__ = np.floor(boxes_data_[:, :, 1] * grid_size[0]).astype('int32')
         j = np.floor(boxes_data_[:, :, 0] * grid_size[1]).astype('int32')
 
         boxes_data_ = boxes_data_.reshape([-1, boxes_data_.shape[-1]])
         best_anchors_ = best_anchors_.reshape([-1, 1])
-        i = i.reshape([-1, 1])
+        i__ = i__.reshape([-1, 1])
         j = j.reshape([-1, 1])
 
         classes = boxes_data_[:, -1].reshape([-1]).astype(np.int)
         one_hot_array = np.zeros([boxes_data_.shape[0], num_classes])
-        one_hot_array[np.arange(boxes_data_.shape[0]), classes - 1] = 1
+        one_hot_array[np.arange(boxes_data_.shape[0]), classes] = 1
 
         boxes_data_mask = boxes_data_[:, 2] > 0
         boxes_data_[boxes_data_mask, 4] = 1
@@ -63,7 +68,7 @@ def get_detector_heatmap(image_ids, image_heights, image_widths, labels):
 
         image_offset = np.repeat(np.linspace(0, y_true.shape[0], boxes_data_shape[0], endpoint=False, dtype=np.int),
                                  boxes_data_.shape[0] / boxes_data_shape[0]).reshape([-1, 1])
-        grid_offset = num_anchors * (grid_size[0] * i + j)
+        grid_offset = num_anchors * (grid_size[0] * i__ + j)
 
         indexing_array = np.array(image_offset + grid_offset + best_anchors_, dtype=np.int32)
         indexing_array = indexing_array[boxes_data_mask, :]
